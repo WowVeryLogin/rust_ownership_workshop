@@ -6,85 +6,33 @@ use std::{
 mod resource;
 use resource::{ExpensiveResource, Uuid, RESOURCE_TTL_MS};
 
-pub struct ExpensiveResourceWrapped {
-    resource: Rc<ExpensiveResource>,
-    pool: Rc<Pool>,
-    uuid: Uuid,
+// Tip 1:
+// You can use dashmap::DashMap as hashmap to simplify working with maps;
+
+// Tip 2:
+// You can spawn async tasks with tokio::task::spawn_local;
+
+// Feel free to create/remove any necessary internal structures
+
+// You don't necesserally need it
+struct ExpensiveResourceWrapped {
+
 }
 
-impl ExpensiveResourceWrapped {
-    fn new(resource: Rc<ExpensiveResource>, pool: Rc<Pool>, uuid: Uuid) -> Self {
-        Self {
-            resource,
-            pool,
-            uuid,
-        }
-    }
-}
-
-impl Drop for ExpensiveResourceWrapped {
-    fn drop(&mut self) {
-        let uuid = self.uuid;
-        let pool = self.pool.clone();
-        pool.inuse_arena.remove(&uuid);
-
-        // we're not cleaning up values immiedietly because setting up data producer is expensive and new user may show up (think of browser refresh)
-        self.pool.cleanup_resourses.insert(
-            uuid,
-            tokio::task::spawn_local(async move {
-                tokio::time::sleep(Duration::from_millis(RESOURCE_TTL_MS)).await;
-                pool.cold_arena.remove(&uuid);
-            }),
-        );
-    }
-}
 
 struct Pool {
-    cleanup_resourses: DashMap<Uuid, tokio::task::JoinHandle<()>>,
-    cold_arena: DashMap<Uuid, Rc<ExpensiveResource>>, // stores expensive to construct prototypes, if value deleted from here then we need to recreate the controller
-    inuse_arena: DashMap<Uuid, Weak<ExpensiveResourceWrapped>>, // stores active values, if value is deleted than recreate quickly by cloning prototype
+    // Your code here
 }
 
 impl Pool {
     fn new() -> Self {
         Self {
-            cleanup_resourses: DashMap::new(),
-            cold_arena: DashMap::new(),
-            inuse_arena: DashMap::new(),
         }
     }
 
     fn get_resource(self: &Rc<Self>, uuid: Uuid) -> Rc<ExpensiveResourceWrapped> {
-        match self.cold_arena.get_mut(&uuid) {
-            // no resource anywhere, create it and put to cold and inuse arenas
-            None => {
-                let resource = Rc::new(ExpensiveResource::new(uuid));
-                let new = Rc::new(ExpensiveResourceWrapped::new(
-                    resource.clone(),
-                    self.clone(),
-                    uuid,
-                ));
-                self.cold_arena.insert(uuid, resource);
-                self.inuse_arena.insert(uuid, Rc::downgrade(&new));
-                new
-            }
-            // we have it in cold arena, check if it is in inuse_arena
-            Some(resource) => match self.inuse_arena.get(&uuid).and_then(|v| v.upgrade()) {
-                Some(v) => v,
-                None => {
-                    if let Some((_, d)) = self.cleanup_resourses.remove(&uuid) {
-                        d.abort();
-                    }
-                    let wrapped = Rc::new(ExpensiveResourceWrapped::new(
-                        resource.clone(),
-                        self.clone(),
-                        uuid,
-                    ));
-                    self.inuse_arena.insert(uuid, Rc::downgrade(&wrapped));
-                    wrapped
-                }
-            },
-        }
+        // Your code here
+        Rc::new(ExpensiveResourceWrapped{})
     }
 }
 
