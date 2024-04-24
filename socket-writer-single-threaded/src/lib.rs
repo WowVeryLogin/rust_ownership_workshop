@@ -3,20 +3,20 @@
 
 use core::task::{Context, Poll, Waker};
 use std::{
+    cell::{Cell, RefCell},
     future::Future,
     pin::Pin,
     time::Duration,
-    sync::{Mutex, atomic::{AtomicBool, AtomicPtr, Ordering}},
 };
 mod receiver;
 
 use receiver::Receiver;
 
 struct SharedState {
-    waker: AtomicPtr<Waker>,
-    exit: AtomicBool,
-    receiver: Mutex<Receiver>,
-    messages_buffer: Mutex<Vec<usize>>,
+    waker: Cell<Option<Waker>>,
+    exit: Cell<bool>,
+    messages_buffer: RefCell<Vec<usize>>,
+    receiver: RefCell<Receiver>,
 
     flush_limit: usize,
     flush_interval: Duration,
@@ -24,11 +24,10 @@ struct SharedState {
 
 impl SharedState {
     fn push_ticks(&self, i: usize) {
-        self.messages_buffer.lock().unwrap().push(i);
+        self.messages_buffer.borrow_mut().push(i);
         if i % self.flush_limit == 0 {
-            let ptr = self.waker.swap(std::ptr::null_mut(), Ordering::Release);
-            if !ptr.is_null() {
-                unsafe { Box::from_raw(ptr) }.wake();
+            if let Some(w) = self.waker.replace(None) {
+                w.wake()
             }
         }
     }
@@ -36,16 +35,16 @@ impl SharedState {
     async fn receive_data(&self) {
         loop {
             let res = tokio::time::timeout(self.flush_interval, WaitForBuffer(self)).await;
-            if self.exit.load(Ordering::Relaxed) {
+            if self.exit.get() {
                 return;
             }
 
             if res.is_err() {
-                self.receiver.lock().unwrap().keepalive();
+                self.receiver.borrow_mut().keepalive();
                 continue;
             }
-            let data: Vec<_> = self.messages_buffer.lock().unwrap().drain(..).collect();
-            self.receiver.lock().unwrap().send_data(&data);
+            let data: Vec<_> = self.messages_buffer.borrow_mut().drain(..).collect();
+            self.receiver.borrow_mut().send_data(&data);
         }
     }
 }
@@ -57,13 +56,9 @@ impl<'a> Future for WaitForBuffer<'a> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let me = self.get_mut();
-        let previous_waker = me.0.waker.swap(
-            Box::into_raw(Box::new(cx.waker().clone())),
-            Ordering::Acquire,
-        );
-        if previous_waker.is_null() {
+        if me.0.waker.replace(Some(cx.waker().clone())).is_some() {
             return Poll::Pending;
-        }
+        };
         Poll::Ready(())
     }
 }
@@ -71,7 +66,7 @@ impl<'a> Future for WaitForBuffer<'a> {
 #[cfg(test)]
 mod tests {
     use core::time;
-    use std::{ptr::null_mut, rc::Rc};
+    use std::rc::Rc;
 
     use super::*;
 
@@ -83,10 +78,10 @@ mod tests {
             .unwrap();
 
         let sh = Rc::new(SharedState {
-            waker: AtomicPtr::new(null_mut()),
-            exit: AtomicBool::new(false),
-            messages_buffer: Mutex::new(Vec::new()),
-            receiver: Mutex::new(Receiver::new()),
+            waker: Cell::new(None),
+            exit: Cell::new(false),
+            messages_buffer: RefCell::new(Vec::new()),
+            receiver: std::cell::RefCell::new(Receiver::new()),
             flush_limit: 100,
             flush_interval: time::Duration::from_millis(10),
         });
@@ -101,7 +96,7 @@ mod tests {
                         tokio::time::sleep(Duration::from_millis(20)).await;
                     }
                 }
-                sh.exit.store(true, Ordering::Relaxed);
+                sh.exit.replace(true);
             }
         });
         set.spawn_local({

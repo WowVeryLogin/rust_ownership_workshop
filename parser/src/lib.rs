@@ -1,5 +1,7 @@
 // Parser uses Lexer. Lexer uses Input. You need to pass data from Parser to Input without touching Lexer at all.
 
+use std::cell::Cell;
+
 struct Logger {}
 
 struct ParserMessage {
@@ -7,6 +9,7 @@ struct ParserMessage {
 }
 
 struct Input<'a> {
+    channel: &'a Cell<Option<ParserMessage>>,
     input: String,
     logger: &'a Logger,
 }
@@ -19,12 +22,11 @@ impl Input<'_> {
             self.input.drain(..1);
         }
 
-        // Your code goes here, if Parser asked us to autocomplete, then autocomplete;
-        // if parser gave autocomplete_string {
-        //      if !expression.ends_with(autocomplete_string) {
-        //          return t + autocomplete_string;
-        //      }
-        // }
+        if let Some(m) = self.channel.take() {
+            if !expression.ends_with(&m.autocomplete) {
+                return expression + &m.autocomplete;
+            }
+        }
         expression
     }
 }
@@ -48,6 +50,7 @@ impl Lexer<'_> {
 }
 
 struct Parser<'a> {
+    channel: &'a Cell<Option<ParserMessage>>,
     lexer: Lexer<'a>,
     logger: &'a Logger,
 }
@@ -62,7 +65,9 @@ impl Parser<'_> {
             if v.starts_with("block_start:") {
                 let fixed_v = v.strip_prefix("block_start:").unwrap();
 
-                // your code goes here: somehow ask input to autocomplete the next block with "}"
+                self.channel.replace(Some(ParserMessage {
+                    autocomplete: "}".to_owned(),
+                }));
 
                 v = fixed_v.to_owned();
             }
@@ -84,10 +89,12 @@ mod tests {
         let expected = "{ab aba} ba {bb bb} {ab aa}".to_owned();
 
         let logger = &Logger {};
+        let channel = &Cell::new(None);
         let mut p = Parser {
             logger,
+            channel,
             lexer: Lexer {
-                input: Input { input, logger },
+                input: Input { input, logger, channel },
             },
         };
         assert_eq!(p.parse(), expected);
