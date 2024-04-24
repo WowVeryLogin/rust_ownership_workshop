@@ -5,8 +5,6 @@ struct ParserMessage {
 }
 
 struct Input<'a> {
-    // You can modify input struct
-    // channel: &'a Cell<Option<ParserMessage>>,
     input: String,
     logger: &'a Logger,
 }
@@ -24,13 +22,6 @@ impl Input<'_> {
         //      if !expression.ends_with(autocomplete_string) {
         //          return t + autocomplete_string;
         //      }
-        // }
-        //
-        // Solution:
-        // if let Some(m) = self.channel.take() {
-        //     if !t.ends_with(&m.autocomplete) {
-        //         return t + &m.autocomplete;
-        //     }
         // }
         expression
     }
@@ -55,8 +46,6 @@ impl Lexer<'_> {
 }
 
 struct Parser<'a> {
-    // You can modify parser struct
-    // channel: &'a Cell<Option<ParserMessage>>,
     lexer: Lexer<'a>,
     logger: &'a Logger,
 }
@@ -72,9 +61,6 @@ impl Parser<'_> {
                 let fixed_v = v.strip_prefix("block_start:").unwrap();
 
                 // your code goes here: somehow ask input to autocomplete the next block with "}"
-                // self.channel.replace(Some(ParserMessage {
-                //     autocomplete: "}".to_owned(),
-                // }));
 
                 v = fixed_v.to_owned();
             }
@@ -96,7 +82,6 @@ mod tests {
         let expected = "{ab aba} ba {bb bb} {ab aa}".to_owned();
 
         let logger = &Logger {};
-        // let channel = &Cell::new(None);
         let mut p = Parser {
             logger,
             lexer: Lexer {

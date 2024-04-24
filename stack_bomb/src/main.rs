@@ -28,9 +28,9 @@ fn recursive_call<T: Access>(obj: T, i: usize) -> T {
 }
 
 fn main() {
-    let mut data = [0u8; OBJECT_SIZE];
-    // let obj = LargeObject(data);
-    let obj = LargeObjectRef(&mut data);
+    let data = [0u8; OBJECT_SIZE];
+    let obj = LargeObject(data);
+    // let obj = LargeObjectRef(&mut data);
     let s = std::time::Instant::now();
     recursive_call(obj, 0);
     println!("{} us", s.elapsed().as_micros());
