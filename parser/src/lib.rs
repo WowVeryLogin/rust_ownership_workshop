@@ -1,3 +1,5 @@
+// Parser uses Lexer. Lexer uses Input. You need to pass data from Parser to Input without touching Lexer at all.
+
 struct Logger {}
 
 struct ParserMessage {
