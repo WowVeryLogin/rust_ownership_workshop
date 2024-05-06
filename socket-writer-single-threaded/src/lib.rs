@@ -1,3 +1,6 @@
+// Since this is single-threaded application, we don't need any lock or atomics with expensive overhead;
+// In this task remove the usage of any atomics or mutexes;
+
 use core::task::{Context, Poll, Waker};
 use std::{
     future::Future,
