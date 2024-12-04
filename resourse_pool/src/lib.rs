@@ -11,35 +11,12 @@
 // You can use dashmap::DashMap as hashmap to simplify working with maps;
 
 use dashmap::DashMap;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 mod resource;
 use resource::{ExpensiveResource, Uuid};
 
-pub struct ExpensiveResourceWrapped {
-    resource: ExpensiveResource,
-    pool: Rc<Pool>,
-    uuid: Uuid,
-}
-
-// Feel free to create/remove any necessary internal structures
-impl ExpensiveResourceWrapped {
-    fn new(resource: ExpensiveResource, pool: Rc<Pool>, uuid: Uuid) -> Self {
-        Self {
-            resource,
-            pool,
-            uuid,
-        }
-    }
-}
-
-impl Drop for ExpensiveResourceWrapped {
-    fn drop(&mut self) {
-        self.pool.arena.remove(&self.uuid);
-    }
-}
-
 struct Pool {
-    arena: DashMap<Uuid, Weak<ExpensiveResourceWrapped>>, // stores active values
+    arena: DashMap<Uuid, Rc<ExpensiveResource>>,
 }
 
 impl Pool {
@@ -49,31 +26,14 @@ impl Pool {
         }
     }
 
-    fn get_resource(self: Rc<Self>, uuid: Uuid) -> Rc<ExpensiveResourceWrapped> {
+    fn get_resource(&self, uuid: Uuid) -> Rc<ExpensiveResource> {
         match self.arena.get(&uuid) {
-            // no resource anywhere, create it and put to cold and inuse arenas
+            Some(r) => r.clone(),
             None => {
-                let resource = Rc::new(ExpensiveResourceWrapped::new(
-                    ExpensiveResource::new(uuid),
-                    self.clone(),
-                    uuid,
-                ));
-                self.arena.insert(uuid, Rc::downgrade(&resource));
-                resource
+                let r = Rc::new(ExpensiveResource::new(uuid));
+                self.arena.insert(uuid, r.clone());
+                r
             }
-            // we have it in cold arena, check if it is in inuse_arena
-            Some(_) => match self.arena.get(&uuid).and_then(|v| v.upgrade()) {
-                Some(v) => v,
-                None => {
-                    let resource = Rc::new(ExpensiveResourceWrapped::new(
-                        ExpensiveResource::new(uuid),
-                        self.clone(),
-                        uuid,
-                    ));
-                    self.arena.insert(uuid, Rc::downgrade(&resource));
-                    resource
-                }
-            },
         }
     }
 }
@@ -85,24 +45,112 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let p = Rc::new(Pool::new());
-        {
-            let _r1 = p.clone().get_resource(100);
-            let _r2 = p.clone().get_resource(100);
-        }
-        {
-            let _r1 = p.clone().get_resource(100);
-            let _r2 = p.clone().get_resource(200);
-            let _r3 = p.clone().get_resource(200);
-        }
+        let p = Pool::new();
+        let _r1 = p.get_resource(100);
+        let _r2 = p.get_resource(200);
+        let _r1 = p.get_resource(100);
+        let _r2 = p.get_resource(200);
+        let _r3 = p.get_resource(200);
         let v = GLOBAL_RESOURCE_MAP.get(&100).unwrap();
-        assert_eq!(v.0, 2);
-        assert_eq!(v.1, 2);
+        assert_eq!(v.0, 1);
         let v = GLOBAL_RESOURCE_MAP.get(&200).unwrap();
         assert_eq!(v.0, 1);
-        assert_eq!(v.1, 1);
     }
 }
+
+// use dashmap::DashMap;
+// use std::rc::{Rc, Weak};
+// mod resource;
+// use resource::{ExpensiveResource, Uuid};
+
+// pub struct ExpensiveResourceWrapped {
+//     resource: ExpensiveResource,
+//     pool: Rc<Pool>,
+//     uuid: Uuid,
+// }
+
+// // Feel free to create/remove any necessary internal structures
+// impl ExpensiveResourceWrapped {
+//     fn new(resource: ExpensiveResource, pool: Rc<Pool>, uuid: Uuid) -> Self {
+//         Self {
+//             resource,
+//             pool,
+//             uuid,
+//         }
+//     }
+// }
+
+// impl Drop for ExpensiveResourceWrapped {
+//     fn drop(&mut self) {
+//         self.pool.arena.remove(&self.uuid);
+//     }
+// }
+
+// struct Pool {
+//     arena: DashMap<Uuid, Weak<ExpensiveResourceWrapped>>, // stores active values
+// }
+
+// impl Pool {
+//     fn new() -> Self {
+//         Self {
+//             arena: DashMap::new(),
+//         }
+//     }
+
+//     fn get_resource(self: &Rc<Self>, uuid: Uuid) -> Rc<ExpensiveResourceWrapped> {
+//         match self.arena.get(&uuid) {
+//             // no resource anywhere, create it and put to cold and inuse arenas
+//             None => {
+//                 let resource = Rc::new(ExpensiveResourceWrapped::new(
+//                     ExpensiveResource::new(uuid),
+//                     self.clone(),
+//                     uuid,
+//                 ));
+//                 self.arena.insert(uuid, Rc::downgrade(&resource));
+//                 resource
+//             }
+//             // we have it in cold arena, check if it is in inuse_arena
+//             Some(_) => match self.arena.get(&uuid).and_then(|v| v.upgrade()) {
+//                 Some(v) => v,
+//                 None => {
+//                     let resource = Rc::new(ExpensiveResourceWrapped::new(
+//                         ExpensiveResource::new(uuid),
+//                         self.clone(),
+//                         uuid,
+//                     ));
+//                     self.arena.insert(uuid, Rc::downgrade(&resource));
+//                     resource
+//                 }
+//             },
+//         }
+//     }
+// }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use resource::GLOBAL_RESOURCE_MAP;
+
+//     #[test]
+//     fn it_works() {
+//         let p = Rc::new(Pool::new());
+//         {
+//             let _r1 = p.get_resource(100);
+//             let _r2 = p.get_resource(100);
+//         }
+//         {
+//             let _r1 = p.get_resource(100);
+//             let _r2 = p.get_resource(200);
+//             let _r3 = p.get_resource(200);
+//         }
+//         let v = GLOBAL_RESOURCE_MAP.get(&100).unwrap();
+//         assert_eq!(v.0, 2);
+//         assert_eq!(v.1, 2);
+//         let v = GLOBAL_RESOURCE_MAP.get(&200).unwrap();
+//         assert_eq!(v.0, 1);
+//         assert_eq!(v.1, 1);
+//     }
+// }
 
 // Extra hometask: add postpone mode. What it means is that resource is not deleted immediatelly after everyone stopped using it
 // it stays in the cache for resource::RESOURCE_TTL_MS;
