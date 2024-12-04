@@ -1,5 +1,5 @@
-// Since this is single-threaded application, we don't need any lock or atomics with expensive overhead;
-// In this task remove the usage of any atomics or mutexes;
+// У нас однопоточное приложние, нам не нужны блокировки на мьютексах и атомики с оверхедом
+// Избавьтесь от любого использования атомиков и мьютексов;
 
 use core::task::{Context, Poll, Waker};
 use std::{

@@ -1,24 +1,17 @@
-// You need to write a cache pool;
-// Imagine you have some resource that is very expensive to contruct and move (e.g.: network connection that it takes milliseconds to establish
-// or high poligonal model couple of megabytes size).
-// Each resource is associated with unique id. You need to implement a caching pool.
-// Pool::get_resource(uuid) logic:
-// if resource with particular uuid is used by someone then return the same resource without constructing it;
-// if no one uses that resource anymore then delete it;
-// construct (ExpensiveResource::new()) only if you can't reuse existing one;
+// Вам нужно написать кэширующий пул
+// Представьте у вас есть ресурс, который очень дорого конструировать и перемещать (например, сетевое соединение, которое требует миллисекунд на установку
+// или высокополигональная модель размером несколько мегабайт)
+// Каждый ресур имеет уникальный id. Вам нужно написать реализацию пула таких ресуров.
+// Логика Pool::get_resource(uuid):
+// Если ресурс по заданному uuid уже существует, то вернуть указатель на него не конструируя его;
+// Если ресурс не конструировался, то сконструктировать его (ExpensiveResource::new())
 
-// Tip:
-// You can use dashmap::DashMap as hashmap to simplify working with maps;
+// Пожалуйста используйте DashMap для хранения ресурсов
 
 use dashmap::DashMap;
 use std::rc::Rc;
 mod resource;
 use resource::{ExpensiveResource, Uuid};
-
-// Feel free to create/remove any necessary internal structures
-pub struct ExpensiveResourceWrapped {}
-
-impl ExpensiveResourceWrapped {}
 
 struct Pool {
     // Your code here
@@ -29,9 +22,9 @@ impl Pool {
         Self {}
     }
 
-    fn get_resource(self: Rc<Self>, uuid: Uuid) -> Rc<ExpensiveResourceWrapped> {
+    fn get_resource(&self, uuid: Uuid) -> Rc<ExpensiveResource> {
         // Your code here
-        Rc::new(ExpensiveResourceWrapped {})
+        Rc::new(ExpensiveResource::new(uuid))
     }
 }
 
@@ -42,30 +35,77 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let p = Rc::new(Pool::new());
-        {
-            let _r1 = p.clone().get_resource(100);
-            let _r2 = p.clone().get_resource(100);
-        }
-        {
-            let _r1 = p.clone().get_resource(100);
-            let _r2 = p.clone().get_resource(200);
-            let _r3 = p.clone().get_resource(200);
-        }
+        let p = Pool::new();
+        let _r1 = p.get_resource(100);
+        let _r2 = p.get_resource(200);
+        let _r1 = p.get_resource(100);
+        let _r2 = p.get_resource(200);
+        let _r3 = p.get_resource(200);
         let v = GLOBAL_RESOURCE_MAP.get(&100).unwrap();
-        assert_eq!(v.0, 2);
-        assert_eq!(v.1, 2);
+        assert_eq!(v.0, 1);
         let v = GLOBAL_RESOURCE_MAP.get(&200).unwrap();
         assert_eq!(v.0, 1);
-        assert_eq!(v.1, 1);
     }
 }
 
-// Extra hometask: add postpone mode. What it means is that resource is not deleted immediatelly after everyone stopped using it
-// it stays in the cache for resource::RESOURCE_TTL_MS;
-// During this period consumers can get it again without construction (if this happens deletion is canceled).
-// Tip for hometask:
-// You can spawn async tasks with tokio::task::spawn_local;
+// Продолжение задания: теперь вам нужно удалять ресурс из пула, если его больше никто не использует
+
+// use dashmap::DashMap;
+// use std::rc::Rc;
+// mod resource;
+// use resource::{ExpensiveResource, Uuid};
+
+// // Feel free to create/remove any necessary internal structures
+// pub struct ExpensiveResourceWrapped {}
+
+// impl ExpensiveResourceWrapped {}
+
+// struct Pool {
+//     // Your code here
+// }
+
+// impl Pool {
+//     fn new() -> Self {
+//         Self {}
+//     }
+
+//     fn get_resource(self: &Rc<Self>, uuid: Uuid) -> Rc<ExpensiveResourceWrapped> {
+//         // Your code here
+//         Rc::new(ExpensiveResourceWrapped {})
+//     }
+// }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use resource::GLOBAL_RESOURCE_MAP;
+
+//     #[test]
+//     fn it_works() {
+//         let p = Rc::new(Pool::new());
+//         {
+//             let _r1 = p.clone().get_resource(100);
+//             let _r2 = p.clone().get_resource(100);
+//         }
+//         {
+//             let _r1 = p.clone().get_resource(100);
+//             let _r2 = p.clone().get_resource(200);
+//             let _r3 = p.clone().get_resource(200);
+//         }
+//         let v = GLOBAL_RESOURCE_MAP.get(&100).unwrap();
+//         assert_eq!(v.0, 2);
+//         assert_eq!(v.1, 2);
+//         let v = GLOBAL_RESOURCE_MAP.get(&200).unwrap();
+//         assert_eq!(v.0, 1);
+//         assert_eq!(v.1, 1);
+//     }
+// }
+
+// Дополнительная домашняя работа: добавьте отложенный режим. Ресурс удаляется не сразу после того, как его перестали использовать, а
+// остается в кэше на какой-то таймаут (resource::RESOURCE_TTL_MS);
+// Если за этот период кто-то запросит ресурс, то получит его без конструирования (удаление отменяется).
+// Подсказка:
+// Вы можете использовать асихнронные таски с помощью tokio::task::spawn_local;
 
 // #[cfg(test)]
 // mod tests {
